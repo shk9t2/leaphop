@@ -3,7 +3,7 @@
     "name": "SimpleRunnerFinal",
     "slug": "SimpleRunnerFinal",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -13,14 +13,32 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.simplerunner",
+      "buildNumber": "1.0.0",
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "NSMicrophoneUsageDescription": "This app requires microphone access for audio features",
+        "NSCameraUsageDescription": "This app requires camera access for future features"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.yourcompany.simplerunner",
+      "versionCode": 1,
+      "permissions": [
+        "VIBRATE",
+        "android.permission.VIBRATE"
+      ],
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/favicon.png"
