@@ -1,5 +1,7 @@
 module.exports = {
   NavigationContainer: ({ children }) => children,
-  useNavigation: jest.fn(),
-  useRoute: jest.fn(),
+  useNavigation: jest.fn(() => ({
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+  })),
 };

@@ -1,7 +1,20 @@
 /**
- * Полностью изолированный unit-тест для utils/PlatformUtils.js
- * Работает в среде Jest без нативных модулей React Native.
+ * Изолированный unit-тест для utils/PlatformUtils.js
+ * Работает в Jest без нативных модулей React Native.
  */
+
+jest.resetModules();
+
+// --- Мок react-native ---
+jest.doMock('react-native', () => ({
+  Platform: { OS: 'android' },
+  Vibration: { vibrate: jest.fn() },
+  Linking: {
+    openURL: jest.fn().mockResolvedValue(true),
+    canOpenURL: jest.fn().mockResolvedValue(true),
+  },
+  Alert: { alert: jest.fn() },
+}));
 
 // --- Моки для DevMenu и TurboModules ---
 jest.mock('react-native/Libraries/NativeModules/specs/NativeDevMenu', () => ({}));
@@ -10,28 +23,31 @@ jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => ({
   get: () => ({}),
 }));
 
-// --- Минимальный мок react-native ---
-jest.mock('react-native', () => ({
-  Platform: { OS: 'android' },
-  Vibration: { vibrate: jest.fn() },
-  Linking: { openURL: jest.fn().mockResolvedValue(true) },
-}));
-
-import PlatformUtils from '../utils/PlatformUtils';
-
+// --- Тесты ---
 describe('PlatformUtils', () => {
   it('vibrate() вызывает системную вибрацию', () => {
-    PlatformUtils.vibrate();
-    expect(require('react-native').Vibration.vibrate).toHaveBeenCalled();
+    jest.isolateModules(() => {
+      const PlatformUtils = require('../utils/PlatformUtils').default;
+      PlatformUtils.vibrate();
+      const { Vibration } = require('react-native');
+      expect(Vibration.vibrate).toHaveBeenCalled();
+    });
   });
 
   it('vibrationPatterns() возвращает шаблоны вибрации', () => {
-    const patterns = PlatformUtils.vibrationPatterns();
-    expect(Array.isArray(patterns)).toBeTruthy();
+    jest.isolateModules(() => {
+      const PlatformUtils = require('../utils/PlatformUtils').default;
+      const patterns = PlatformUtils.vibrationPatterns();
+      expect(typeof patterns).toBe('object');
+      expect(Array.isArray(patterns.short)).toBe(true);
+    });
   });
 
   it('openURL() открывает ссылку успешно', async () => {
-    const result = await PlatformUtils.openURL('https://example.com');
-    expect(result).toBe(true);
+    jest.isolateModules(async () => {
+      const PlatformUtils = require('../utils/PlatformUtils').default;
+      const result = await PlatformUtils.openURL('https://example.com');
+      expect(result).toBe(true);
+    });
   });
 });

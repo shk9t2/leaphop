@@ -1,19 +1,15 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 export default function MenuScreen({ navigation }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Меню игры</Text>
-      <TouchableOpacity 
-        style={styles.button}
-        onPress={() => navigation.navigate('Game')}
-      >
+      <Text style={styles.title}>Главное меню</Text>
+
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Game')}>
         <Text style={styles.buttonText}>🎮 Начать игру</Text>
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.button}
-        onPress={() => navigation.navigate('Settings')}
-      >
+
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Settings')}>
         <Text style={styles.buttonText}>⚙️ Настройки</Text>
       </TouchableOpacity>
     </View>
@@ -21,39 +17,14 @@ export default function MenuScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ECF0F1',
-    padding: 20,
-    // Для ландшафтного режима можно добавить
-    flexDirection: 'row', // или изменить расположение элементов
-  },
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ECF0F1',
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginBottom: 50,
-  },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 40 },
   button: {
     backgroundColor: '#3498DB',
-    padding: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 25,
     marginBottom: 20,
-    borderRadius: 12,
-    width: '80%',
-    alignItems: 'center',
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  buttonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
 });
