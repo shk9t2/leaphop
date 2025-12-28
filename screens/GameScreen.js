@@ -44,6 +44,10 @@ export default function GameScreen({ navigation }) {
   const PLAYER_SPEED = 8;
   const GAME_LOOP_INTERVAL = 16;
 
+  // Доп. тайминги для более "дружелюбного" прыжка
+  const COYOTE_TIME_MS = 120; // миллисекунд — можно менять (100-200)
+  const JUMP_DEBOUNCE_MS = 60; // минимальное время между прыжками
+
   // ССЫЛКИ ДЛЯ РЕАЛЬНОГО ВРЕМЕНИ - все изменяемые значения храним в useRef
   const gameStateRef = useRef('playing');
   const playerXRef = useRef(100);
@@ -56,6 +60,9 @@ export default function GameScreen({ navigation }) {
   const coinsRef = useRef(0);
   const gameTimeRef = useRef(0);
   const saveSettingsTimeoutRef = useRef(null);
+  const lastGroundedTimeRef = useRef(0);
+  const lastJumpTimeRef = useRef(0);
+  const deadEnemiesRef = useRef(new Set());
 
   // Паттерны вибрации для разных событий
   const vibrationPatterns = {
@@ -108,7 +115,7 @@ export default function GameScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    if (platforms.length > 0) {
+    if (platforms.length > 0 && !gameLoopInterval.current) {
       startGameLoop();
     }
   }, [platforms]);
@@ -141,11 +148,15 @@ export default function GameScreen({ navigation }) {
     ];
 
     // ВРАГИ
+    // Создаем врагов, выравнивая их Y по платформам (platform.y - height)
     const initialEnemies = [
-      { id: 1, x: 400, y: screenHeight - 220, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
-      { id: 2, x: 900, y: screenHeight - 270, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
-      { id: 3, x: 1500, y: screenHeight - 320, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
-    ];
+      { id: 1, x: 400, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
+      { id: 2, x: 900, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
+      { id: 3, x: 1500, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
+    ].map(e => {
+      const plat = initialPlatforms.find(p => p.id === e.platformId);
+      return { ...e, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
+    });
 
     setPlatforms(initialPlatforms);
     setCoinsList(initialCoins);
@@ -172,6 +183,9 @@ export default function GameScreen({ navigation }) {
   };
 
   const startGameLoop = () => {
+    // Защита от повторного запуска (если интервал уже существует)
+    if (gameLoopInterval.current) return;
+
     gameLoopInterval.current = setInterval(() => {
       if (gameStateRef.current === 'playing') {
         updateGame();
@@ -242,6 +256,8 @@ export default function GameScreen({ navigation }) {
           newY = platform.y - 40;
           playerVelocityRef.current.y = 0;
           grounded = true;
+          // <-- вставить здесь
+          lastGroundedTimeRef.current = Date.now();
           break;
         }
         // Столкновение снизу (игрок ударяется головой)
@@ -289,18 +305,25 @@ export default function GameScreen({ navigation }) {
       prev.map(enemy => {
         const platform = platforms.find(p => p.id === enemy.platformId);
         if (!platform) return enemy;
-        
         let newX = enemy.x + enemy.speed * enemy.direction;
-        
-        // Проверка границ платформы
-        if (newX < platform.x || newX + enemy.width > platform.x + platform.width) {
-          return { ...enemy, direction: -enemy.direction };
-        }
-        
+        let newDirection = enemy.direction;
+
         // Позиция Y всегда на платформе
         const newY = platform.y - enemy.height;
-        
-        return { ...enemy, x: newX, y: newY };
+
+        // Проверка границ платформы и корректировка позиции/направления
+        const leftBound = platform.x;
+        const rightBound = platform.x + platform.width - enemy.width;
+
+        if (newX < leftBound) {
+          newX = leftBound;
+          newDirection = 1;
+        } else if (newX > rightBound) {
+          newX = rightBound;
+          newDirection = -1;
+        }
+
+        return { ...enemy, x: newX, y: newY, direction: newDirection };
       })
     );
   };
@@ -333,13 +356,28 @@ export default function GameScreen({ navigation }) {
     const currentEnemies = [...enemies];
     
     currentEnemies.forEach(enemy => {
-      if (checkCollision(
-        { x: playerXRef.current, y: playerYRef.current, width: 40, height: 40 },
-        enemy
-      )) {
-        // Проверка, прыгнул ли игрок на врага
-        if (playerVelocityRef.current.y > 0 && playerYRef.current + 20 <= enemy.y) {
-          // Уничтожение врага
+      // Если враг уже помечен как убитый — пропускаем
+      if (deadEnemiesRef.current.has(enemy.id)) return;
+
+      // Защита от некорректных данных: убедимся, что у врага есть размеры
+      const enemyBox = {
+        x: enemy.x || 0,
+        y: enemy.y || 0,
+        width: enemy.width || 40,
+        height: enemy.height || 40,
+      };
+
+      const playerBox = { x: playerXRef.current, y: playerYRef.current, width: 40, height: 40 };
+
+      if (checkCollision(playerBox, enemyBox)) {
+        // Определим предыдущую позицию игрока (до применения текущей скорости)
+        const prevPlayerY = playerYRef.current - playerVelocityRef.current.y;
+        const prevPlayerBottom = prevPlayerY + playerBox.height;
+
+        // Если в предыдущем тике нижняя граница игрока была выше верхней границы врага — значит он подпрыгнул сверху
+        if (playerVelocityRef.current.y > 0 && prevPlayerBottom <= enemyBox.y + 4) {
+          // Уничтожение врага — помечаем сразу, чтобы избежать повторных срабатываний
+          deadEnemiesRef.current.add(enemy.id);
           setEnemies(prev => prev.filter(e => e.id !== enemy.id));
           playerVelocityRef.current.y = JUMP_STRENGTH * 0.7;
           addScore(200);
@@ -356,11 +394,17 @@ export default function GameScreen({ navigation }) {
    * ФУНКЦИЯ ПРОВЕРКИ СТОЛКНОВЕНИЙ
    */
   const checkCollision = (obj1, obj2) => {
+    // Защитимся от отсутствующих width/height и используем <=/>= для более устойчивой детекции
+    const w1 = obj1.width ?? 40;
+    const h1 = obj1.height ?? 40;
+    const w2 = obj2.width ?? 40;
+    const h2 = obj2.height ?? 40;
+
     return (
-      obj1.x < obj2.x + obj2.width &&
-      obj1.x + obj1.width > obj2.x &&
-      obj1.y < obj2.y + obj2.height &&
-      obj1.y + obj1.height > obj2.y
+      obj1.x <= obj2.x + w2 &&
+      obj1.x + w1 >= obj2.x &&
+      obj1.y <= obj2.y + h2 &&
+      obj1.y + h1 >= obj2.y
     );
   };
 
@@ -457,9 +501,21 @@ export default function GameScreen({ navigation }) {
   };
 
   const jump = () => {
-    if (gameStateRef.current === 'playing' && isGroundedRef.current) {
+    if (gameStateRef.current !== 'playing') return;
+
+    const now = Date.now();
+
+    // Защита от слишком частых повторных прыжков
+    if (now - lastJumpTimeRef.current < JUMP_DEBOUNCE_MS) {
+      return;
+    }
+
+    const withinCoyote = (now - lastGroundedTimeRef.current) <= COYOTE_TIME_MS;
+
+    if (isGroundedRef.current || withinCoyote) {
       playerVelocityRef.current.y = JUMP_STRENGTH;
       isGroundedRef.current = false;
+      lastJumpTimeRef.current = now;
       safeVibrate(vibrationPatterns.buttonPress);
     }
   };
@@ -498,6 +554,10 @@ export default function GameScreen({ navigation }) {
     setCoins(0);
     setGameTime(0);
     setCameraOffset(0);
+    // Очистка списка убитых врагов
+    if (deadEnemiesRef && deadEnemiesRef.current) {
+      deadEnemiesRef.current.clear();
+    }
     
     // Переинициализируем игру
     initializeGame();
@@ -645,7 +705,7 @@ export default function GameScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.controlButton} 
-            onPress={jump}
+            onPressIn={jump}
             activeOpacity={0.7}
           >
             <Text style={styles.controlButtonText}>↑</Text>
