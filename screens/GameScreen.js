@@ -92,14 +92,11 @@ export default function GameScreen({ navigation }) {
 
   useEffect(() => {
     initializeGame();
-    startGameLoop();
-
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
       useNativeDriver: true,
     }).start();
-
     return () => {
       if (gameLoopInterval.current) {
         clearInterval(gameLoopInterval.current);
@@ -109,6 +106,12 @@ export default function GameScreen({ navigation }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (platforms.length > 0) {
+      startGameLoop();
+    }
+  }, [platforms]);
 
   /**
    * ИНИЦИАЛИЗАЦИЯ ИГРЫ
