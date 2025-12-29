@@ -24,6 +24,7 @@ export default function GameScreen({ navigation }) {
 
   // СОСТОЯНИЕ ИГРЫ - только для отображения
   const [gameState, setGameState] = useState('playing');
+  const [level, setLevel] = useState(1);
   const [playerPosition, setPlayerPosition] = useState({ x: 100, y: screenHeight - 150 });
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
@@ -47,6 +48,7 @@ export default function GameScreen({ navigation }) {
   // Доп. тайминги для более "дружелюбного" прыжка
   const COYOTE_TIME_MS = 120; // миллисекунд — можно менять (100-200)
   const JUMP_DEBOUNCE_MS = 60; // минимальное время между прыжками
+  const ENEMY_HITBOX_SHRINK = 12; // уменьшение хитбокса врага (px)
 
   // ССЫЛКИ ДЛЯ РЕАЛЬНОГО ВРЕМЕНИ - все изменяемые значения храним в useRef
   const gameStateRef = useRef('playing');
@@ -62,7 +64,9 @@ export default function GameScreen({ navigation }) {
   const saveSettingsTimeoutRef = useRef(null);
   const lastGroundedTimeRef = useRef(0);
   const lastJumpTimeRef = useRef(0);
+  const levelRef = useRef(1);
   const deadEnemiesRef = useRef(new Set());
+  const enemiesRef = useRef([]);
 
   // Паттерны вибрации для разных событий
   const vibrationPatterns = {
@@ -98,7 +102,7 @@ export default function GameScreen({ navigation }) {
   };
 
   useEffect(() => {
-    initializeGame();
+    initializeGame(levelRef.current);
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
@@ -123,9 +127,9 @@ export default function GameScreen({ navigation }) {
   /**
    * ИНИЦИАЛИЗАЦИЯ ИГРЫ
    */
-  const initializeGame = () => {
-    // ПЛАТФОРМЫ
-    const initialPlatforms = [
+  const initializeGame = (levelArg = 1) => {
+    // Базовые платформы/предметы — для уровня 1
+    const basePlatforms = [
       { id: 1, x: 0, y: screenHeight - 80, width: LEVEL_WIDTH, height: 80, type: 'ground' },
       { id: 2, x: 300, y: screenHeight - 200, width: 120, height: 20, type: 'platform' },
       { id: 3, x: 500, y: screenHeight - 300, width: 120, height: 20, type: 'platform' },
@@ -135,9 +139,8 @@ export default function GameScreen({ navigation }) {
       { id: 7, x: 1700, y: screenHeight - 380, width: 120, height: 20, type: 'platform' },
       { id: 8, x: 2000, y: screenHeight - 220, width: 180, height: 20, type: 'platform' },
     ];
-    
-    // МОНЕТЫ
-    const initialCoins = [
+
+    const baseCoins = [
       { id: 1, x: 350, y: screenHeight - 250, collected: false },
       { id: 2, x: 550, y: screenHeight - 350, collected: false },
       { id: 3, x: 850, y: screenHeight - 300, collected: false },
@@ -147,20 +150,95 @@ export default function GameScreen({ navigation }) {
       { id: 7, x: 2050, y: screenHeight - 270, collected: false },
     ];
 
-    // ВРАГИ
-    // Создаем врагов, выравнивая их Y по платформам (platform.y - height)
-    const initialEnemies = [
+    const baseEnemies = [
       { id: 1, x: 400, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
       { id: 2, x: 900, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
       { id: 3, x: 1500, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
-    ].map(e => {
-      const plat = initialPlatforms.find(p => p.id === e.platformId);
-      return { ...e, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
-    });
+    ];
+
+    // Для уровней 2 и 3 — делаем простые вариации: смещаем X и немного меняем высоты
+    const offsetX = (levelArg - 1) * 200; // смещение вправо по сравнению с уровнем 1
+    const yOffset = (levelArg - 1) * 20; // чуть выше для усложнения
+
+    // Специальная разметка для уровня 2 — предотвращаем платформы за пределами экрана
+    let initialPlatforms, initialCoins, initialEnemies;
+    if (levelArg === 2) {
+      initialPlatforms = [
+        { id: 1, x: 0, y: screenHeight - 80, width: LEVEL_WIDTH, height: 80, type: 'ground' },
+        { id: 2, x: 250, y: screenHeight - 180, width: 140, height: 20, type: 'platform' },
+        { id: 3, x: 520, y: screenHeight - 260, width: 120, height: 20, type: 'platform' },
+        { id: 4, x: 820, y: screenHeight - 220, width: 160, height: 20, type: 'platform' },
+        { id: 5, x: 1150, y: screenHeight - 320, width: 120, height: 20, type: 'platform' },
+        { id: 6, x: 1450, y: screenHeight - 260, width: 140, height: 20, type: 'platform' },
+        { id: 7, x: 1700, y: screenHeight - 340, width: 120, height: 20, type: 'platform' },
+        { id: 8, x: 2000, y: screenHeight - 200, width: 180, height: 20, type: 'platform' },
+      ];
+
+      initialCoins = [
+        { id: 1, x: 300, y: screenHeight - 230, collected: false },
+        { id: 2, x: 540, y: screenHeight - 310, collected: false },
+        { id: 3, x: 880, y: screenHeight - 260, collected: false },
+        { id: 4, x: 1150, y: screenHeight - 360, collected: false },
+        { id: 5, x: 1460, y: screenHeight - 300, collected: false },
+        { id: 6, x: 1750, y: screenHeight - 380, collected: false },
+        { id: 7, x: 2050, y: screenHeight - 240, collected: false },
+      ];
+
+      initialEnemies = [
+        { id: 1, x: 300, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
+        { id: 2, x: 840, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
+        { id: 3, x: 1460, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
+      ].map(e => {
+        const plat = initialPlatforms.find(p => p.id === e.platformId);
+        return { ...e, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
+      });
+    } else if (levelArg === 3) {
+      // Custom layout for level 3 — different spacing and heights
+      initialPlatforms = [
+        { id: 1, x: 0, y: screenHeight - 80, width: LEVEL_WIDTH, height: 80, type: 'ground' },
+        { id: 2, x: 220, y: screenHeight - 240, width: 140, height: 20, type: 'platform' },
+        { id: 3, x: 480, y: screenHeight - 320, width: 120, height: 20, type: 'platform' },
+        { id: 4, x: 760, y: screenHeight - 200, width: 160, height: 20, type: 'platform' },
+        { id: 5, x: 1040, y: screenHeight - 360, width: 140, height: 20, type: 'platform' },
+        { id: 6, x: 1320, y: screenHeight - 260, width: 140, height: 20, type: 'platform' },
+        { id: 7, x: 1600, y: screenHeight - 330, width: 120, height: 20, type: 'platform' },
+        { id: 8, x: 1880, y: screenHeight - 210, width: 180, height: 20, type: 'platform' },
+      ];
+
+      initialCoins = [
+        { id: 1, x: 260, y: screenHeight - 280, collected: false },
+        { id: 2, x: 500, y: screenHeight - 360, collected: false },
+        { id: 3, x: 780, y: screenHeight - 240, collected: false },
+        { id: 4, x: 1060, y: screenHeight - 400, collected: false },
+        { id: 5, x: 1340, y: screenHeight - 300, collected: false },
+        { id: 6, x: 1620, y: screenHeight - 370, collected: false },
+        { id: 7, x: 1900, y: screenHeight - 230, collected: false },
+      ];
+
+      initialEnemies = [
+        { id: 1, x: 260, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
+        { id: 2, x: 760, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
+        { id: 3, x: 1320, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
+      ].map(e => {
+        const plat = initialPlatforms.find(p => p.id === e.platformId);
+        return { ...e, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
+      });
+    } else {
+      const offsetX = (levelArg - 1) * 200; // смещение вправо по сравнению с уровнем 1
+      const yOffset = (levelArg - 1) * 20; // чуть выше для усложнения
+
+      initialPlatforms = basePlatforms.map(p => ({ ...p, x: p.id === 1 ? p.x : p.x + offsetX, y: p.y - yOffset }));
+      initialCoins = baseCoins.map(c => ({ ...c, x: c.x + offsetX, y: c.y - yOffset, collected: false }));
+      initialEnemies = baseEnemies.map(e => {
+        const plat = initialPlatforms.find(p => p.id === e.platformId);
+        return { ...e, x: e.x + offsetX, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
+      });
+    }
 
     setPlatforms(initialPlatforms);
     setCoinsList(initialCoins);
     setEnemies(initialEnemies);
+    enemiesRef.current = initialEnemies;
     
     // Инициализация всех ссылок
     const initialPosition = { x: 100, y: screenHeight - 140 };
@@ -170,6 +248,7 @@ export default function GameScreen({ navigation }) {
     isGroundedRef.current = false;
     keysPressedRef.current = { left: false, right: false };
     gameStateRef.current = 'playing';
+    setGameState('playing');
     scoreRef.current = 0;
     coinsRef.current = 0;
     gameTimeRef.current = 0;
@@ -301,31 +380,32 @@ export default function GameScreen({ navigation }) {
    * ОБНОВЛЕНИЕ ВРАГОВ
    */
   const updateEnemies = () => {
-    setEnemies(prev => 
-      prev.map(enemy => {
-        const platform = platforms.find(p => p.id === enemy.platformId);
-        if (!platform) return enemy;
-        let newX = enemy.x + enemy.speed * enemy.direction;
-        let newDirection = enemy.direction;
+    // Обновляем позиции врагов синхронно в ref, затем ставим в состояние
+    const newEnemies = enemiesRef.current.map(enemy => {
+      const platform = platforms.find(p => p.id === enemy.platformId);
+      if (!platform) return enemy;
 
-        // Позиция Y всегда на платформе
-        const newY = platform.y - enemy.height;
+      let newX = enemy.x + (enemy.speed || 0) * (enemy.direction || 1);
+      let newDirection = enemy.direction || 1;
 
-        // Проверка границ платформы и корректировка позиции/направления
-        const leftBound = platform.x;
-        const rightBound = platform.x + platform.width - enemy.width;
+      const newY = platform.y - (enemy.height || 40);
 
-        if (newX < leftBound) {
-          newX = leftBound;
-          newDirection = 1;
-        } else if (newX > rightBound) {
-          newX = rightBound;
-          newDirection = -1;
-        }
+      const leftBound = platform.x;
+      const rightBound = platform.x + platform.width - (enemy.width || 40);
 
-        return { ...enemy, x: newX, y: newY, direction: newDirection };
-      })
-    );
+      if (newX < leftBound) {
+        newX = leftBound;
+        newDirection = 1;
+      } else if (newX > rightBound) {
+        newX = rightBound;
+        newDirection = -1;
+      }
+
+      return { ...enemy, x: newX, y: newY, direction: newDirection };
+    });
+
+    enemiesRef.current = newEnemies;
+    setEnemies(newEnemies);
   };
 
   /**
@@ -337,34 +417,47 @@ export default function GameScreen({ navigation }) {
   };
 
   const checkCoinCollisions = () => {
-    setCoinsList(prev => 
-      prev.map(coin => {
-        if (!coin.collected && checkCollision(
-          { x: playerXRef.current, y: playerYRef.current, width: 40, height: 40 },
-          { x: coin.x, y: coin.y, width: 30, height: 30 }
-        )) {
+    setCoinsList(prev => {
+      const playerBox = { x: playerXRef.current, y: playerYRef.current, width: 40, height: 40 };
+      const newCoins = prev.map(coin => {
+        if (!coin.collected && checkCollision(playerBox, { x: coin.x, y: coin.y, width: 30, height: 30 })) {
           collectCoin(coin.id);
           return { ...coin, collected: true };
         }
         return coin;
-      })
-    );
+      });
+
+      // Если все монеты собраны — завершаем уровень
+      const allCollected = newCoins.length > 0 && newCoins.every(c => c.collected);
+      if (allCollected) {
+        // Небольшая задержка чтобы позволить последнему collectCoin обновиться
+        setTimeout(() => {
+          levelComplete();
+        }, 50);
+      }
+
+      return newCoins;
+    });
   };
 
   const checkEnemyCollisions = () => {
-    // Создаем копию массива врагов для безопасной итерации
-    const currentEnemies = [...enemies];
+    // Работаем с последней синхронизированной копией врагов из ref
+    const currentEnemies = enemiesRef.current || [];
     
     currentEnemies.forEach(enemy => {
       // Если враг уже помечен как убитый — пропускаем
       if (deadEnemiesRef.current.has(enemy.id)) return;
 
       // Защита от некорректных данных: убедимся, что у врага есть размеры
+      // Уменьшаем хитбокс врага, чтобы случайные касания по краю не считались смертельными
+      const rawW = enemy.width || 40;
+      const rawH = enemy.height || 40;
+      const shrink = ENEMY_HITBOX_SHRINK;
       const enemyBox = {
-        x: enemy.x || 0,
-        y: enemy.y || 0,
-        width: enemy.width || 40,
-        height: enemy.height || 40,
+        x: (enemy.x || 0) + Math.round(shrink / 2),
+        y: (enemy.y || 0) + Math.round(shrink / 2),
+        width: Math.max(8, rawW - shrink),
+        height: Math.max(8, rawH - shrink),
       };
 
       const playerBox = { x: playerXRef.current, y: playerYRef.current, width: 40, height: 40 };
@@ -378,7 +471,11 @@ export default function GameScreen({ navigation }) {
         if (playerVelocityRef.current.y > 0 && prevPlayerBottom <= enemyBox.y + 4) {
           // Уничтожение врага — помечаем сразу, чтобы избежать повторных срабатываний
           deadEnemiesRef.current.add(enemy.id);
+          // Удаляем врага из состояния и из рефа, чтобы он не восстанавливался
           setEnemies(prev => prev.filter(e => e.id !== enemy.id));
+          if (enemiesRef && enemiesRef.current) {
+            enemiesRef.current = enemiesRef.current.filter(e => e.id !== enemy.id);
+          }
           playerVelocityRef.current.y = JUMP_STRENGTH * 0.7;
           addScore(200);
           safeVibrate(vibrationPatterns.enemyDefeated);
@@ -441,6 +538,50 @@ export default function GameScreen({ navigation }) {
   const updateGameTime = () => {
     gameTimeRef.current += GAME_LOOP_INTERVAL;
     setGameTime(gameTimeRef.current);
+  };
+
+  const levelComplete = () => {
+    if (gameStateRef.current === 'level-complete') return;
+    gameStateRef.current = 'level-complete';
+    setGameState('level-complete');
+
+    // Остановим игровой цикл
+    if (gameLoopInterval.current) {
+      clearInterval(gameLoopInterval.current);
+      gameLoopInterval.current = null;
+    }
+  };
+
+  const startNextLevel = () => {
+    // Защита от двойного клика: если мы уже в процессе перехода — игнорируем
+    if (gameStateRef.current === 'transitioning-level') return;
+
+    // Инкремент уровня
+    gameStateRef.current = 'transitioning-level';
+    setGameState('transitioning-level');
+    levelRef.current = (levelRef.current || 1) + 1;
+    setLevel(levelRef.current);
+
+    // Очистим состояния/ссылки
+    if (gameLoopInterval.current) {
+      clearInterval(gameLoopInterval.current);
+      gameLoopInterval.current = null;
+    }
+    if (saveSettingsTimeoutRef.current) {
+      clearTimeout(saveSettingsTimeoutRef.current);
+      saveSettingsTimeoutRef.current = null;
+    }
+    if (deadEnemiesRef && deadEnemiesRef.current) deadEnemiesRef.current.clear();
+
+    // Переинициализация игры с учётом нового уровня
+    initializeGame(levelRef.current);
+    // Немного подождём, затем запустим цикл
+    setTimeout(() => {
+      // Сброс состояния после перехода
+      gameStateRef.current = 'playing';
+      setGameState('playing');
+      startGameLoop();
+    }, 50);
   };
 
   /**
@@ -560,7 +701,7 @@ export default function GameScreen({ navigation }) {
     }
     
     // Переинициализируем игру
-    initializeGame();
+    initializeGame(levelRef.current);
     startGameLoop();
   };
 
@@ -657,6 +798,7 @@ export default function GameScreen({ navigation }) {
       <View style={styles.hud}>
         <Text style={styles.hudText}>Счет: {score}</Text>
         <Text style={styles.hudText}>Монеты: {coins}</Text>
+        <Text style={styles.hudText}>Ур.: {level}</Text>
         <Text style={styles.hudText}>Время: {formatTime(gameTime)}</Text>
         <Text style={styles.hudText}>Рекорд: {gameSettings.bestScore}</Text>
       </View>
@@ -676,6 +818,20 @@ export default function GameScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       )}
+      
+          {/* УРОВЕНЬ ПРОЙДЕН */}
+          {gameState === 'level-complete' && (
+            <View style={styles.levelCompleteOverlay}>
+              <Text style={styles.levelCompleteTitle}>Уровень {level} пройден!</Text>
+              <Text style={styles.levelCompleteText}>Отличная работа — хотите перейти на следующий уровень?</Text>
+              <TouchableOpacity style={styles.menuButton} onPress={startNextLevel}>
+                <Text style={styles.menuButtonText}>Следующий уровень</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('Menu')}>
+                <Text style={styles.menuButtonText}>В меню</Text>
+              </TouchableOpacity>
+            </View>
+          )}
       
       {/* КОНЕЦ ИГРЫ */}
       {gameState === 'game-over' && (
@@ -925,5 +1081,26 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  levelCompleteOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 400,
+    padding: 30,
+  },
+  levelCompleteTitle: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#2ECC71',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  levelCompleteText: {
+    fontSize: 18,
+    color: 'white',
+    marginBottom: 20,
+    textAlign: 'center',
   },
 });

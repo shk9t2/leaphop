@@ -21,9 +21,9 @@ const Stack = createStackNavigator();
 
 export default function App() {
   const [gameSettings, setGameSettings] = useState({
-    soundEnabled: true,
-    musicEnabled: true,
-    vibrationEnabled: true,
+    soundEnabled: false,
+    musicEnabled: false,
+    vibrationEnabled: false,
     difficulty: 'medium',
     bestScore: 0,
     totalCoins: 0

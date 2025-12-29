@@ -53,11 +53,11 @@ export default function SettingsScreen() {
         { 
           text: 'Сбросить', 
           style: 'destructive',
-          onPress: () => {
+            onPress: () => {
             const defaultSettings = {
-              soundEnabled: true,
-              musicEnabled: true,
-              vibrationEnabled: true,
+              soundEnabled: false,
+              musicEnabled: false,
+              vibrationEnabled: false,
               difficulty: 'medium',
               bestScore: gameSettings.bestScore, // Сохраняем рекорд
               totalCoins: gameSettings.totalCoins // Сохраняем монеты
