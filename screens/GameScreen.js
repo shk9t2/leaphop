@@ -188,6 +188,7 @@ export default function GameScreen({ navigation }) {
         { id: 1, x: 300, width: 40, height: 40, speed: 2, direction: 1, platformId: 2 },
         { id: 2, x: 840, width: 40, height: 40, speed: 3, direction: -1, platformId: 4 },
         { id: 3, x: 1460, width: 40, height: 40, speed: 2, direction: 1, platformId: 6 },
+        { id: 4, x: 2050, width: 40, height: 40, speed: 2, direction: -1, platformId: 8 },
       ].map(e => {
         const plat = initialPlatforms.find(p => p.id === e.platformId);
         return { ...e, y: plat ? (plat.y - e.height) : (screenHeight - 200 - e.height) };
@@ -545,6 +546,17 @@ export default function GameScreen({ navigation }) {
     gameStateRef.current = 'level-complete';
     setGameState('level-complete');
 
+    // Сохраняем рекорд
+    const newScore = {
+      score: scoreRef.current,
+      level: levelRef.current,
+      time: Math.round(gameTimeRef.current / 1000)
+    };
+    const updatedHighScores = [...gameSettings.highScores, newScore]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10); // топ 10
+    saveSettings({ ...gameSettings, highScores: updatedHighScores });
+
     // Остановим игровой цикл
     if (gameLoopInterval.current) {
       clearInterval(gameLoopInterval.current);
@@ -615,6 +627,21 @@ export default function GameScreen({ navigation }) {
       // Используем setTimeout для безопасного обновления после рендеринга
       setTimeout(() => {
         saveSettings({ ...gameSettings, bestScore: scoreRef.current });
+      }, 0);
+    }
+
+    // Сохраняем в таблицу рекордов, если уровень >1
+    if (levelRef.current > 1) {
+      const newScore = {
+        score: scoreRef.current,
+        level: levelRef.current,
+        time: Math.round(gameTimeRef.current / 1000)
+      };
+      const updatedHighScores = [...gameSettings.highScores, newScore]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+      setTimeout(() => {
+        saveSettings({ ...gameSettings, highScores: updatedHighScores });
       }, 0);
     }
   };

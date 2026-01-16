@@ -26,7 +26,8 @@ export default function App() {
     vibrationEnabled: false,
     difficulty: 'medium',
     bestScore: 0,
-    totalCoins: 0
+    totalCoins: 0,
+    highScores: []
   });
 
   useEffect(() => {
